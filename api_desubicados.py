@@ -1,10 +1,10 @@
-from fastapi import FastAPI, Depends, APIRouter
+from fastapi import FastAPI, Depends, APIRouter, HTTPException, Query
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import Date, DateTime
 from datetime import datetime
-
+from pydantic import BaseModel
 
 # Configuración de la base de datos de DesUbicados
 SQLALCHEMY_DATABASE_URL = "mariadb+mariadbconnector://diego:diego123@localhost/desubicados"
@@ -17,6 +17,21 @@ Base = declarative_base()
 
 # Crear la sesión
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+# Crear el router de esta API
+api_desubicados = APIRouter()
+
+
+# Dependencia para obtennr la sesión de la base de datos
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 
 # Modelo de SQLAlchemy para Trabajadores
 class Trabajadores(Base):
@@ -37,6 +52,91 @@ class Trabajadores(Base):
     correo = Column(String(100), unique=True, nullable=False)
     contrasena = Column(String(255), nullable=False)
     puesto = Column(String(255), nullable=False)
+
+
+# Ruta para obtener todos los trabajadores
+@api_desubicados.get("/Trabajadores")
+def get_trabajadores(db: Session = Depends(get_db)):
+    trabajadores = db.query(Trabajadores).all()
+    return [
+        {
+            "id_trabajador": t.id_trabajador,
+            "nombre": t.nombre,
+            "primer_apellido": t.primer_apellido,
+            "segundo_apellido": t.segundo_apellido,
+            "fecha_nacimiento": t.fecha_nacimiento,
+            "dni": t.dni,
+            "calle": t.calle,
+            "numero_casa": t.numero_casa,
+            "localidad": t.localidad,
+            "provincia": t.provincia,
+            "cod_postal": t.cod_postal,
+            "nacionalidad": t.nacionalidad,
+            "correo": t.correo,
+            "contrasena": t.contrasena,
+            "puesto": t.puesto,
+        }
+        for t in trabajadores
+    ]
+
+# Ruta para obtener un trabajador por correo NUEVO
+@api_desubicados.get("/Trabajadores/correo/")
+def get_trabajador_por_correo(correo: str = Query(...), db: Session = Depends(get_db)):
+
+    trabajador = db.query(Trabajadores).filter(Trabajadores.correo.like(correo)).first()
+
+    if trabajador is None:
+        raise HTTPException(status_code=404, detail="Trabajador no encontrado")
+    return trabajador
+    
+
+# Modelo Pydantic para la creación de un trabajador
+class TrabajadorCreate(BaseModel):
+    nombre: str
+    primer_apellido: str
+    segundo_apellido: str
+    fecha_nacimiento: str
+    dni: str
+    calle: str
+    numero_casa: str
+    localidad: str
+    provincia: str
+    cod_postal: str
+    nacionalidad: str
+    correo: str
+    contrasena: str
+    puesto: str
+#METODO CREA TRABAJADORES
+@api_desubicados.post("/Trabajadores")
+def create_trabajador(trabajador: TrabajadorCreate, db: Session = Depends(get_db)):
+    try:
+        # Convertir la fecha de nacimiento a formato correcto
+        fecha_nacimiento = datetime.strptime(trabajador.fecha_nacimiento, '%d-%m-%Y').strftime('%Y-%m-%d')
+
+        nuevo_trabajador = Trabajadores(
+            nombre=trabajador.nombre,
+            primer_apellido=trabajador.primer_apellido,
+            segundo_apellido=trabajador.segundo_apellido,
+            fecha_nacimiento=fecha_nacimiento,  # Fecha en el formato correcto
+            dni=trabajador.dni,
+            calle=trabajador.calle,
+            numero_casa=trabajador.numero_casa,
+            localidad=trabajador.localidad,
+            provincia=trabajador.provincia,
+            cod_postal=trabajador.cod_postal,
+            nacionalidad=trabajador.nacionalidad,
+            correo=trabajador.correo,
+            contrasena=trabajador.contrasena,
+            puesto=trabajador.puesto
+        )
+
+        db.add(nuevo_trabajador)
+        db.commit()
+        db.refresh(nuevo_trabajador)
+        return {"mensaje": "Trabajador creado correctamente", "id_trabajador": nuevo_trabajador.id_trabajador}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
 
 #Modelo SQAlcghemy para Clientes
 class Clientes(Base):
@@ -60,65 +160,6 @@ class Clientes(Base):
     
     relojes = relationship('Clientes_Relojes', back_populates='cliente')
 
-
-#Modeloo SQAlcghemy para Relojes
-class Relojes(Base):
-    __tablename__ = 'Relojes'
-
-    id_reloj = Column(String(17), primary_key=True)  
-    ip = Column(String(45), nullable=True)  
-    
-    clientes = relationship('Clientes_Relojes', back_populates='reloj')
-
-
-#Modelo SQAlcghemy para Clientes_Relojes
-class Clientes_Relojes(Base):
-    __tablename__ = 'Clientes_Relojes'
-
-    id_cliente = Column(Integer, ForeignKey('Clientes.id_cliente'), primary_key=True)  # Clientes
-    id_reloj = Column(String(17), ForeignKey('Relojes.id_reloj'), primary_key=True)  # Relojes
-    fecha_asignacion = Column(DateTime, default=datetime.utcnow)  # Fecha de asignación del reloj al cliente
-
-    # Relaciones con las tablas Clientes y Relojes
-    cliente = relationship('Clientes', back_populates='relojes')
-    reloj = relationship('Relojes', back_populates='clientes')
-    
-# Dependencia para obtennr la sesión de la base de datos
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Crear el router de esta API
-api_desubicados = APIRouter()
-
-# Ruta para obtener todos los trabajadores
-@api_desubicados.get("/Trabajadores")
-def get_trabajadores(db: Session = Depends(get_db)):
-    trabajadores = db.query(Trabajadores).all()
-    return [
-        {
-            "id_trabajador": t.id_trabajador,
-            "nombre": t.nombre,
-            "primer_apellido": t.primer_apellido,
-            "segundo_apellido": t.segundo_apellido,
-            "fecha_nacimiento": t.fecha_nacimiento,
-            "dni": t.dni,
-            "calle": t.calle,
-            "numero_casa": t.numero_casa,
-            "localidad": t.localidad,
-            "provincia": t.provincia,
-            "cod_postal": t.cod_postal,
-            "nacionalidad": t.nacionalidad,
-            "correo": t.correo,
-            "puesto": t.puesto,
-        }
-        for t in trabajadores
-    ]
-
-
 #Ruta para obtener Clientes
 
 @api_desubicados.get("/Clientes")
@@ -140,10 +181,79 @@ def get_clientes(db: Session = Depends(get_db)):
             "nacionalidad": c.nacionalidad,
             "puntos": c.puntos,
             "correo": c.correo,
+            "contrasena": c.contrasena,
         }
         for c in clientes
     ]
 
+#Ruta para obtener un cliente por correo
+@api_desubicados.get("/Clientes/correo/")
+def get_cliente_por_correo(correo: str = Query(...), db: Session = Depends(get_db)):
+    cliente = db.query(Clientes).filter(Clientes.correo.like(correo)).first()
+    
+    if cliente is None:
+        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    return cliente
+
+
+# Modelo Pydantic para la creación de un cliente
+class ClienteCreate(BaseModel):
+    nombre: str
+    primer_apellido: str
+    segundo_apellido: str
+    fecha_nacimiento: str
+    dni: str
+    calle: str
+    numero_casa: str
+    localidad: str
+    provincia: str
+    cod_postal: str
+    nacionalidad: str
+    puntos: str
+    correo: str
+    contrasena: str
+
+#METODO CREA CLIENTES
+@api_desubicados.post("/Clientes")
+def create_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):
+    try:
+        # Convertir la fecha de nacimiento a formato correcto
+        fecha_nacimiento = datetime.strptime(cliente.fecha_nacimiento, '%d-%m-%Y').strftime('%Y-%m-%d')
+
+        nuevo_cliente = Clientes(
+            nombre=cliente.nombre,
+            primer_apellido=cliente.primer_apellido,
+            segundo_apellido=cliente.segundo_apellido,
+            fecha_nacimiento=fecha_nacimiento,  # Fecha en el formato correcto
+            dni=cliente.dni,
+            calle=cliente.calle,
+            numero_casa=cliente.numero_casa,
+            localidad=cliente.localidad,
+            provincia=cliente.provincia,
+            cod_postal=cliente.cod_postal,
+            nacionalidad=cliente.nacionalidad,
+            puntos=cliente.puntos,
+            correo=cliente.correo,
+            contrasena=cliente.contrasena,
+        )
+
+        db.add(nuevo_cliente)
+        db.commit()
+        db.refresh(nuevo_cliente)
+        return {"mensaje": "Cliente creado correctamente", "id_trabajador": nuevo_cliente.id_cliente}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e)}
+
+#Modeloo SQAlcghemy para Relojes
+class Relojes(Base):
+    __tablename__ = 'Relojes'
+
+    id_reloj = Column(String(17), primary_key=True)  
+    ip = Column(String(45), nullable=True)  
+    
+    clientes = relationship('Clientes_Relojes', back_populates='reloj')
+    
 #Ruta para obtener Relojes
 @api_desubicados.get("/Relojes")
 def get_relojes(db: Session = Depends(get_db)):
@@ -156,6 +266,19 @@ def get_relojes(db: Session = Depends(get_db)):
         for c in relojes
     ]
 
+
+#Modelo SQAlcghemy para Clientes_Relojes
+class Clientes_Relojes(Base):
+    __tablename__ = 'Clientes_Relojes'
+
+    id_cliente = Column(Integer, ForeignKey('Clientes.id_cliente'), primary_key=True)  # Clientes
+    id_reloj = Column(String(17), ForeignKey('Relojes.id_reloj'), primary_key=True)  # Relojes
+    fecha_asignacion = Column(DateTime, default=datetime.utcnow)  # Fecha de asignación del reloj al cliente
+
+    # Relaciones con las tablas Clientes y Relojes
+    cliente = relationship('Clientes', back_populates='relojes')
+    reloj = relationship('Relojes', back_populates='clientes')
+
 @api_desubicados.get("/Clientes_Relojes")
 def get_clientes_relojes(db: Session = Depends(get_db)):
     clientes_relojes = db.query(Clientes_Relojes).all()
@@ -167,3 +290,8 @@ def get_clientes_relojes(db: Session = Depends(get_db)):
         }
         for c in clientes_relojes
     ]
+
+          
+    
+    
+
