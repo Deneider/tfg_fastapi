@@ -1,8 +1,12 @@
 from fastapi import FastAPI
-from api_desubicados import api_desubicados
+from fastapi.staticfiles import StaticFiles
+from api.api_desubicados import api_desubicados
 
 
 app = FastAPI()
 
-# Incluir las rutas de las dos APIs
+# ruta Api
 app.include_router(api_desubicados, prefix="/apiDesubicados", tags=["DesUbicados"])
+
+# ruta web
+app.mount("/web", StaticFiles(directory="web", html=True), name="web")
