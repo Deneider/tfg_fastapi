@@ -76,7 +76,8 @@ def get_trabajadores(db: Session = Depends(get_db)):
             "contrasena": t.contrasena,
             "puesto": t.puesto,
         }
-        for t in trabajadores
+        #Bucle mostrar todos los trabajadores y los campos anteriores correspodientes 
+        for t in trabajadores 
     ]
 
 # Ruta para obtener un trabajador por correo NUEVO
@@ -110,7 +111,7 @@ class TrabajadorCreate(BaseModel):
 @api_desubicados.post("/Trabajadores/crear")
 def create_trabajador(trabajador: TrabajadorCreate, db: Session = Depends(get_db)):
     try:
-        # Convertir la fecha de nacimiento a formato correcto
+        # Convertir la fecha de nacimiento a formato correcto, ya que si no mysql no recoge la información y devuelve error
         fecha_nacimiento = datetime.strptime(trabajador.fecha_nacimiento, '%d-%m-%Y').strftime('%Y-%m-%d')
 
         nuevo_trabajador = Trabajadores(
@@ -129,10 +130,11 @@ def create_trabajador(trabajador: TrabajadorCreate, db: Session = Depends(get_db
             contrasena=trabajador.contrasena,
             puesto=trabajador.puesto
         )
-
+        #Añade el nuevo trabajador con la información anterior
         db.add(nuevo_trabajador)
         db.commit()
         db.refresh(nuevo_trabajador)
+        #Si crea el trabajador correctamente devuelve lo siguiente : (id_trabajador se crea de forma automatica en mysql ya que es autoincremental)
         return {"mensaje": "Trabajador creado correctamente", "id_trabajador": nuevo_trabajador.id_trabajador}
     except Exception as e:
         db.rollback()
@@ -146,8 +148,6 @@ def delete_trabajador(id_trabajador: int, db: Session = Depends(get_db)):
 
     if not trabajador:
         raise HTTPException(status_code=404, detail="Trabajador no encontrado")
-
-
     # Eliminar el cliente
     db.delete(trabajador)
     db.commit()
@@ -531,7 +531,7 @@ def desasignar_reloj_cliente(id_cliente: int, id_reloj: str, db: Session = Depen
     return {"mensaje": "Reloj desasignado correctamente del cliente", "id_cliente": id_cliente, "id_reloj": id_reloj}
 
 
-#COSAS DEL RELOJ
+#RELOJ
 @api_desubicados.get("/obtener_cliente_por_mac/{mac}")
 def obtener_cliente_por_mac(mac: str, db: Session = Depends(get_db)):
     relacion = db.query(Clientes_Relojes).filter(Clientes_Relojes.id_reloj == mac).first()
@@ -546,7 +546,4 @@ def obtener_cliente_por_mac(mac: str, db: Session = Depends(get_db)):
         "nombre": cliente.nombre,
         "puntos": cliente.puntos
     }
-
-
-
 
